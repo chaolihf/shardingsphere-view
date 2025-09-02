@@ -1,1 +1,5 @@
-# ShadingDriver
+# 1、说明
+基于ShardingSphere实现sql语句的转写，将对特定表的操作转化为等同对视图的操作
+
+# 2、注入点
+需要在XX位置对sql语句进行改写，不改变其他的流程

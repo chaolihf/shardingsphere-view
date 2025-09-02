@@ -1,0 +1,101 @@
+apply plugin: 'java-library'
+apply plugin: 'eclipse'
+apply plugin: 'maven-publish'
+[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+
+group="com.chinatelecom.udp.component"
+sourceCompatibility = 11
+
+
+def devzzkfUsername = System.getenv("SrdCloudUserName")
+def devzzkfPassword = System.getenv("SrdCloudPassword")
+def assetVersion = System.getenv("AssetVersion")
+
+if (assetVersion) {
+    version = assetVersion
+}
+else{
+    version = 'it.1.1.1'
+}
+
+println "研发云账号为" + devzzkfUsername
+println "研发云制品库密钥为" + devzzkfPassword
+println "制品的版本号为" + version
+
+repositories {
+	maven {
+		url "https://artifact.srdcloud.cn/artifactory/unifiedplatform-udp-release-maven-local"
+		credentials {
+            username devzzkfUsername
+            password devzzkfPassword
+        }
+	}
+	
+	maven {
+		url "https://artifact.srdcloud.cn/artifactory/public-maven-virtual"
+	}
+	maven {
+		url "https://artifact.srdcloud.cn/artifactory/public-inner-maven-virtual"
+	}
+}
+
+task sourcesJar(type: Jar) {
+	 archiveClassifier = 'sources'
+	 from sourceSets.main.allSource
+}
+jar {
+    manifest {
+        attributes 'Implementation-Title': 'Drois Dirver', 'Implementation-Version': version
+    }
+} 
+
+sourceCompatibility = 11
+dependencies {
+	compileOnly("org.apache.shardingsphere:shardingsphere-proxy-bootstrap:5.5.2")
+
+	testImplementation group: 'junit', name: 'junit', version: '4.12'
+	
+}
+
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifactId = 'sharding-driver'
+            from components.java
+            artifact sourcesJar
+            pom {
+		        name = "sharding-driver"
+		        description = "library for sharding rewrite"
+		        url = "http://www.ahoa.com:8101/ahdxgitlab/ahit/platform/"
+		        licenses {
+		          license {
+		            name = "The Apache License, Version 2.0"
+		            url = "http://www.apache.org/licenses/LICENSE-2.0.txt"
+		          }
+		        }
+		        developers {
+		          developer {
+		            id = "chaoli279@hotmail.com"
+		            name = "Li Chao"
+		            email = "chaoli279@hotmail.com"
+		          }
+		        }
+		        scm {
+		          connection = "scm:http://www.ahoa.com:8101/ahdxgitlab/ahit/platform/UnifiedDevelopmentPlatform.git"
+		          developerConnection = "scm:http://www.ahoa.com:8101/ahdxgitlab/ahit/platform/UnifiedDevelopmentPlatform.git"
+		          url = "http://www.ahoa.com:8101/ahdxgitlab/ahit/platform/UnifiedDevelopmentPlatform.git"
+		        }
+		      }
+        }
+    }
+    repositories {
+        maven {
+            url "https://artifact.srdcloud.cn/artifactory/unifiedplatform-udp-release-maven-local/"
+			credentials(PasswordCredentials){
+            	username=devzzkfUsername
+				password=devzzkfPassword
+            }
+        }
+    }
+}

@@ -24,57 +24,32 @@ public class ShardingsphereSqlViewRewriteTest {
 		DatabaseType databaseType = TypedSPILoader.getService(DatabaseType.class, "MySQL");
 		SQLParserEngine parserEngine = new SQLParserEngine(databaseType, new CacheOption(2000, 65535L));
 		SQLViewRewrite rewriter=new SQLViewRewrite();
-		rewriter.analyseSql(parserEngine,"select * from table1 t where name='bbb'");
-		rewriter.analyseSql(parserEngine,"select * from (select * from view1) t where name='bbb'");
-		rewriter.analyseSql(parserEngine,"select * from (select * from view1)");
+		rewriter.setParseEngine(parserEngine);
+		rewriter.analyseSql("select * from table1 t where name='bbb'");
+		rewriter.analyseSql("select * from (select * from view1) t where name='bbb'");
+		rewriter.analyseSql("select * from (select * from view1)");
 		
-		
+		String result=rewriter.rewriteSql("select * from table1 where name='bbb'");
+		assertTrue(("SELECT * \n" + //
+						"FROM \n" + //
+						"(\n" + //
+						"\tSELECT * \n" + //
+						"\tFROM view1\n" + //
+						") table1\n" + //
+						"WHERE \n" + //
+						"\tname = 'bbb';").equals(result));
+
+		result=rewriter.rewriteSql("select * from table1 t where name='bbb'");
+		assertTrue(("SELECT * \n" + //
+						"FROM \n" + //
+						"(\n" + //
+						"\tSELECT * \n" + //
+						"\tFROM view1\n" + //
+						") t\n" + //
+						"WHERE \n" + //
+						"\tname = 'bbb';").equals(result));
 		
         
-        
-//		SQLStatementVisitorEngine visitorEngine = new SQLStatementVisitorEngine(databaseType);
-//		SQLStatement statement = visitorEngine.visit(parseASTNode);
-//		
-//		
-//		
-//		if (rootNode instanceof MySQLStatementParser.ExecuteContext) {
-//			MySQLStatementParser.ExecuteContext executeContext=(MySQLStatementParser.ExecuteContext)rootNode;
-//			SelectContext selectContext = executeContext.select();
-//			
-//		}
-		
-		// AST替换逻辑示例
-//		if (parseASTNode.getSqlStatement() instanceof org.apache.shardingsphere.sql.parser.sql.common.statement.dml.SelectStatement) {
-//			org.apache.shardingsphere.sql.parser.sql.common.statement.dml.SelectStatement selectStatement =
-//				(org.apache.shardingsphere.sql.parser.sql.common.statement.dml.SelectStatement) parseASTNode.getSqlStatement();
-//			for (org.apache.shardingsphere.sql.parser.sql.common.segment.dml.table.TableSegment tableSegment : selectStatement.getFrom()) {
-//				if (tableSegment instanceof org.apache.shardingsphere.sql.parser.sql.common.segment.dml.table.SimpleTableSegment) {
-//					org.apache.shardingsphere.sql.parser.sql.common.segment.dml.table.SimpleTableSegment simpleTable =
-//						(org.apache.shardingsphere.sql.parser.sql.common.segment.dml.table.SimpleTableSegment) tableSegment;
-//					String tableName = simpleTable.getTableName().getIdentifier().getValue();
-//					if ("table1".equalsIgnoreCase(tableName)) {
-//						// 构造子查询
-//						String subquerySql = "select * from view1";
-//						ParseASTNode subqueryAst = parserEngine.parse(subquerySql, false);
-//						org.apache.shardingsphere.sql.parser.sql.common.segment.dml.SubquerySegment subquerySegment =
-//							new org.apache.shardingsphere.sql.parser.sql.common.segment.dml.SubquerySegment(
-//								subqueryAst.getSqlStatement(),
-//								simpleTable.getStartIndex(),
-//								simpleTable.getStopIndex()
-//							);
-//						org.apache.shardingsphere.sql.parser.sql.common.segment.dml.table.SubqueryTableSegment subqueryTable =
-//							new org.apache.shardingsphere.sql.parser.sql.common.segment.dml.table.SubqueryTableSegment(
-//								subquerySegment,
-//								simpleTable.getAlias().orElse(null)
-//							);
-//						// 替换原TableSegment
-//						selectStatement.getFrom().remove(tableSegment);
-//						selectStatement.getFrom().add(subqueryTable);
-//						break;
-//					}
-//				}
-//			}
-//		}
 	}
 
 }

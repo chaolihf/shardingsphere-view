@@ -1,28 +1,38 @@
 package com.chinatelecom.udp.component.shardingsphere;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 
-import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
+import org.apache.calcite.sql.parser.impl.ParseException;
 import org.apache.shardingsphere.infra.database.core.spi.DatabaseTypedSPILoader;
 import org.apache.shardingsphere.infra.database.core.type.DatabaseType;
-import org.apache.shardingsphere.infra.database.mysql.type.MySQLDatabaseType;
 import org.apache.shardingsphere.infra.spi.type.typed.TypedSPILoader;
-import org.apache.shardingsphere.sql.parser.api.CacheOption;
 import org.apache.shardingsphere.sql.parser.api.SQLParserEngine;
-import org.apache.shardingsphere.sql.parser.api.SQLStatementVisitorEngine;
 import org.apache.shardingsphere.sql.parser.api.visitor.format.SQLFormatVisitor;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.AliasContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.AssignmentContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.AssignmentValuesContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.ColumnRefContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.DeleteContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.ExprContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.FieldsContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.InsertContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.InsertValuesClauseContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.SelectContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.SetAssignmentsClauseContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.SimpleExprContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.SubqueryContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.TableFactorContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.TableNameContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.UpdateContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.WhereClauseContext;
 import org.apache.shardingsphere.sql.parser.core.ParseASTNode;
-import org.apache.shardingsphere.sql.parser.statement.core.statement.SQLStatement;
+import org.apache.shardingsphere.sql.parser.exception.SQLParsingException;
+
 
 public class SQLViewRewrite {
 
@@ -76,23 +86,159 @@ public class SQLViewRewrite {
 	public String rewriteSql(String sql) {
 		ParseASTNode parseASTNode = parserEngine.parse(sql, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
-		rewriteTableFactor(rootNode);
+		if (rootNode instanceof SelectContext){
+			rewriteTableFactor(rootNode);
+		} else if (rootNode instanceof InsertContext){
+			rewriteInsertContext(rootNode);
+		} else if (rootNode instanceof UpdateContext){
+			rewriteUpdateContext(rootNode);
+		} else if (rootNode instanceof DeleteContext){
+			rewriteDeleteContext(rootNode);
+		} 
 		printStructure(rootNode,0);
 		return printSql(rootNode);
 	}
+
+	public void rewriteInsertContext(ParseTree rootNode) {
+		FieldsContext insertFieldsContext=null;
+		AssignmentValuesContext assignValueContext=null;
+		//查找insert value子语句
+		for(int i=0;i<rootNode.getChildCount();i++){
+			ParseTree childContext = rootNode.getChild(i);
+			if (childContext instanceof InsertValuesClauseContext){
+				InsertValuesClauseContext insertValuesContext=(InsertValuesClauseContext)childContext;
+				for(int j=0;j<insertValuesContext.getChildCount();j++){
+					ParseTree valueContext = insertValuesContext.getChild(j);
+					if (valueContext instanceof FieldsContext){
+						insertFieldsContext=(FieldsContext)valueContext;
+					} else if (valueContext instanceof AssignmentValuesContext){
+						assignValueContext=(AssignmentValuesContext)valueContext;
+					}
+				}
+				if (insertFieldsContext==null){
+					throw new SQLParsingException("不允许插入语句不指定列:" + printSql(rootNode));
+				} else if (assignValueContext!=null){
+					ParseTree[] appendValues=getInsertFieldAndValue();
+					insertFieldsContext.children.add(appendValues[0]);
+					insertFieldsContext.children.add(appendValues[1]);
+					assignValueContext.children.add(appendValues[2]);
+					assignValueContext.children.add(appendValues[3]);
+					
+				}
+				
+			}
+		}
+	}
+
+	/**
+	 * 
+	 * @return 固定长度为4，前两个为字段，后两个为值
+	 */
+	private ParseTree[] getInsertFieldAndValue() {
+		ParseTree[] result=new ParseTree[4];
+		String insertSql="insert into t(a,tanentId) values('','userId')";
+		ParseASTNode parseASTNode = parserEngine.parse(insertSql, false);
+		ParseTree rootNode = parseASTNode.getRootNode();
+		InsertValuesClauseContext insertValuesContext=(InsertValuesClauseContext)rootNode.getChild(4);
+		FieldsContext fieldsContext=(FieldsContext)insertValuesContext.getChild(1);
+		AssignmentValuesContext valuesContext=(AssignmentValuesContext)insertValuesContext.getChild(4);
+		result[0]=fieldsContext.getChild(1);
+		result[1]=fieldsContext.getChild(2);
+		result[2]=valuesContext.getChild(2);
+		result[3]=valuesContext.getChild(3);
+		return result;
+	}
+
+	public void rewriteUpdateContext(ParseTree rootNode) {
+		WhereClauseContext whereClauseContext=findWhereContext(rootNode);
+		if (whereClauseContext==null){
+			throw new SQLParsingException("更新必须包含条件语句," + printSql(rootNode));
+		}
+		SetAssignmentsClauseContext setAssignContext=findSetAssignContext(rootNode);
+		for(int i=0;i<setAssignContext.getChildCount();i++){
+			ParseTree childNode = setAssignContext.getChild(i);
+			if(childNode instanceof AssignmentContext){
+				if (!checkColumnNameValid(childNode)){
+					throw new SQLParsingException("更新语句不允许包含租户字段," + printSql(rootNode));
+				}
+			}
+		}
+		ExprContext expressContext=getConditionExpressionContext(whereClauseContext.getChild(1));
+		whereClauseContext.children.set(1, expressContext);
+	}
+
+	/**
+	 * 更新语句的列名不能有租户字段
+	 * @param childNode
+	 */
+	private boolean checkColumnNameValid(ParseTree assignmentNode) {
+		for (int i = 0; i < assignmentNode.getChildCount(); i++) {
+			ParseTree childNode = assignmentNode.getChild(i);
+			if (childNode instanceof ColumnRefContext){
+				TerminalNodeImpl nameNode=(TerminalNodeImpl) childNode.getChild(0).getChild(0).getChild(0);
+				if ("tanent_id".equalsIgnoreCase(nameNode.getText())){
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+
+	private SetAssignmentsClauseContext findSetAssignContext(ParseTree rootNode) {
+		for(int i=0;i<rootNode.getChildCount();i++){
+			ParseTree childContext=rootNode.getChild(i);
+			if(childContext instanceof SetAssignmentsClauseContext){
+				return (SetAssignmentsClauseContext) childContext;
+			}
+		}
+		return null;
+	}
+
+	public void rewriteDeleteContext(ParseTree rootNode) {
+		WhereClauseContext whereClauseContext=findWhereContext(rootNode);
+		if (whereClauseContext==null){
+			throw new SQLParsingException("删除必须包含条件语句," + printSql(rootNode));
+		}
+		ExprContext expressContext=getConditionExpressionContext(whereClauseContext.getChild(1));
+		whereClauseContext.children.set(1, expressContext);
+	}
+
+	private ExprContext getConditionExpressionContext(ParseTree originParseTree){
+		String deleteSql="delete from table1 where  tanent_id='user' and (name='b')";
+		ParseASTNode parseASTNode = parserEngine.parse(deleteSql, false);
+		ParseTree rootNode = parseASTNode.getRootNode();
+		WhereClauseContext whereContext=(WhereClauseContext) rootNode.getChild(3);
+		ExprContext result=(ExprContext) whereContext.getChild(1);
+		ExprContext subsituteContext=(ExprContext) result.getChild(2);
+		//找到()的父节点
+		SimpleExprContext simpleExprContext=(SimpleExprContext) subsituteContext.getChild(0).getChild(0).getChild(0).getChild(0);
+		simpleExprContext.children.set(1, originParseTree);
+		return result;
+	}
 	
+	private WhereClauseContext findWhereContext(ParseTree rootNode) {
+		for(int i=0;i<rootNode.getChildCount();i++){
+			ParseTree childContext=rootNode.getChild(i);
+			if(childContext instanceof WhereClauseContext){
+				return (WhereClauseContext) childContext;
+			}
+		}
+		return null;
+	}
+
 	public void rewriteTableFactor(ParseTree rootNode) {
 		int childCount=rootNode.getChildCount();
-		if (rootNode instanceof MySQLStatementParser.TableFactorContext) {
-			MySQLStatementParser.TableFactorContext factor=(MySQLStatementParser.TableFactorContext)rootNode;
+		if (rootNode instanceof TableFactorContext) {
+			TableFactorContext factor=(TableFactorContext)rootNode;
 			int tableFactorCount= factor.getChildCount();
-			MySQLStatementParser.TableNameContext tableNameContext=null;
+			TableNameContext tableNameContext=null;
 			boolean hasAlias=false;
 			for(int i=0;i<tableFactorCount;i++){
 				ParseTree childContext = factor.getChild(i);
-				if (childContext instanceof MySQLStatementParser.TableNameContext){
-					tableNameContext=(MySQLStatementParser.TableNameContext)childContext;
-				} else if (childContext instanceof MySQLStatementParser.AliasContext){
+				if (childContext instanceof TableNameContext){
+					tableNameContext=(TableNameContext)childContext;
+				} else if (childContext instanceof AliasContext){
 					hasAlias=true;
 				}
 			}
@@ -129,7 +275,7 @@ public class SQLViewRewrite {
 	 * @return
 	 */
 	private ParseTree createReplaceSubQuery(TerminalNodeImpl tableNode,boolean hasAlias) {
-		String subQuery="select * from (select * from view1)" + (hasAlias?"":" " + tableNode.getText());
+		String subQuery="select * from (select * from view1 where tanentId='userId')" + (hasAlias?"":" " + tableNode.getText());
 		ParseASTNode parseASTNode = parserEngine.parse(subQuery, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		printStructure(rootNode, 0);
@@ -145,10 +291,10 @@ public class SQLViewRewrite {
 		return (TerminalNodeImpl)tableNode;
 	}
 
-	private MySQLStatementParser.SubqueryContext getSubustituteSubQuery(ParseTree rootNode){
+	private SubqueryContext getSubustituteSubQuery(ParseTree rootNode){
 		int childCount=rootNode.getChildCount();
-		if (rootNode instanceof MySQLStatementParser.SubqueryContext) {
-			return (MySQLStatementParser.SubqueryContext)rootNode;
+		if (rootNode instanceof SubqueryContext) {
+			return (SubqueryContext)rootNode;
 		}
 		for(int i=0;i<childCount;i++) {
 			ParseTree child = rootNode.getChild(i);

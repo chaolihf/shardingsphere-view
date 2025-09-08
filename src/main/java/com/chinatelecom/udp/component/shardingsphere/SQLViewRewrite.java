@@ -134,6 +134,7 @@ public class SQLViewRewrite {
 						insertFieldsContext=(FieldsContext)valueContext;
 					} else if (valueContext instanceof SelectContext){
 						insertProjectionsContext=findFirstClassType(valueContext,ProjectionsContext.class);
+						rewriteTableFactor(valueContext);
 					}
 				}
 				if (insertFieldsContext==null){
@@ -225,6 +226,7 @@ public class SQLViewRewrite {
 		}
 		ExprContext expressContext=getConditionExpressionContext(whereClauseContext.getChild(1));
 		whereClauseContext.children.set(1, expressContext);
+		rewriteTableFactor(whereClauseContext);
 	}
 
 	/**
@@ -262,6 +264,7 @@ public class SQLViewRewrite {
 		}
 		ExprContext expressContext=getConditionExpressionContext(whereClauseContext.getChild(1));
 		whereClauseContext.children.set(1, expressContext);
+		rewriteTableFactor(whereClauseContext);
 	}
 
 	private ExprContext getConditionExpressionContext(ParseTree originParseTree){
@@ -306,7 +309,7 @@ public class SQLViewRewrite {
 			if (tableNameContext!=null){
 				TerminalNodeImpl tableNode= getTableName(tableNameContext);
 				if (isTableShouldRewrite(tableNode)){
-					SubqueryContext subqueryContext = getSubustituteSubQuery(createReplaceSubQuery(tableNode,hasAlias));
+					SubqueryContext subqueryContext = findFirstClassType(createReplaceSubQuery(tableNode,hasAlias), SubqueryContext.class);
 					if (hasAlias){
 						factor.children.set(0, subqueryContext);
 					} 
@@ -351,21 +354,5 @@ public class SQLViewRewrite {
 		return (TerminalNodeImpl)tableNode;
 	}
 
-	private SubqueryContext getSubustituteSubQuery(ParseTree rootNode){
-		int childCount=rootNode.getChildCount();
-		if (rootNode instanceof SubqueryContext) {
-			return (SubqueryContext)rootNode;
-		}
-		for(int i=0;i<childCount;i++) {
-			ParseTree child = rootNode.getChild(i);
-			if (child!=null) {
-				SubqueryContext subQueryResult = getSubustituteSubQuery(child);
-				if(subQueryResult!=null){
-					return subQueryResult;
-				}
-			}
-		}
-		return null;
-	}
 
 }

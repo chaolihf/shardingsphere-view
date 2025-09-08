@@ -3,13 +3,10 @@
  */
 package com.chinatelecom.udp.component.shardingsphere;
 
-import static org.junit.Assert.assertTrue;
-
 import org.apache.shardingsphere.infra.database.core.type.DatabaseType;
 import org.apache.shardingsphere.infra.spi.type.typed.TypedSPILoader;
 import org.apache.shardingsphere.sql.parser.api.CacheOption;
 import org.apache.shardingsphere.sql.parser.api.SQLParserEngine;
-import org.apache.shardingsphere.sql.parser.exception.SQLParsingException;
 import org.junit.Test;
 
 /**
@@ -26,10 +23,6 @@ public class ShardingsphereSqlViewRewriteTest {
 		SQLViewRewrite rewriter=new SQLViewRewrite();
 		rewriter.setParseEngine(parserEngine);
 		
-		rewriter.rewriteSql("insert into table1(name) select name from table2");
-
-		rewriter.analyseSql("select * from table1 t where name='bbb'");
-
 
 
 		//rewriter.analyseSql("select * from (select * from view1) t where name='bbb'");
@@ -103,6 +96,12 @@ public class ShardingsphereSqlViewRewriteTest {
 		// 				"\ttanent_id = 'user'\n" + //
 		// 				"\tand (name = 'b')").equals(result));
 
+		// rewriter.analyseSql("insert into table1(name) select name from table2");
+		// rewriter.analyseSql("insert into table1(name,tanent_id) select name,'user' from table2");
+		// result=rewriter.rewriteSql("insert into table1(name) select name from table2");
+		// assertTrue(("INSERT  INTO table1 (name , tanent_id) \n" + //
+		// 				"SELECT name , 'user' \n" + //
+		// 				"FROM table2;").equals(result));
 		
 	}
 

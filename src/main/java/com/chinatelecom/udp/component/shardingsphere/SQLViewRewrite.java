@@ -1,18 +1,15 @@
 package com.chinatelecom.udp.component.shardingsphere;
 
 import java.util.Arrays;
-import java.util.List;
 import java.util.Properties;
 
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
-import org.apache.calcite.sql.parser.impl.ParseException;
 import org.apache.shardingsphere.infra.database.core.spi.DatabaseTypedSPILoader;
 import org.apache.shardingsphere.infra.database.core.type.DatabaseType;
 import org.apache.shardingsphere.infra.spi.type.typed.TypedSPILoader;
 import org.apache.shardingsphere.sql.parser.api.SQLParserEngine;
 import org.apache.shardingsphere.sql.parser.api.visitor.format.SQLFormatVisitor;
-import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.AliasContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.AssignmentContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.AssignmentValuesContext;
@@ -21,7 +18,9 @@ import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.DeleteC
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.ExprContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.FieldsContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.InsertContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.InsertSelectClauseContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.InsertValuesClauseContext;
+import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.ProjectionsContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.SelectContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.SetAssignmentsClauseContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.SimpleExprContext;
@@ -101,11 +100,11 @@ public class SQLViewRewrite {
 
 	public void rewriteInsertContext(ParseTree rootNode) {
 		FieldsContext insertFieldsContext=null;
-		AssignmentValuesContext assignValueContext=null;
 		//查找insert value子语句
 		for(int i=0;i<rootNode.getChildCount();i++){
 			ParseTree childContext = rootNode.getChild(i);
 			if (childContext instanceof InsertValuesClauseContext){
+				AssignmentValuesContext assignValueContext=null;
 				InsertValuesClauseContext insertValuesContext=(InsertValuesClauseContext)childContext;
 				for(int j=0;j<insertValuesContext.getChildCount();j++){
 					ParseTree valueContext = insertValuesContext.getChild(j);
@@ -126,9 +125,49 @@ public class SQLViewRewrite {
 					
 				}
 				
+			} else if (childContext instanceof InsertSelectClauseContext){
+				InsertSelectClauseContext insertSelectContext=(InsertSelectClauseContext)childContext;
+				ProjectionsContext insertProjectionsContext=null;
+				for(int j=0;j<insertSelectContext.getChildCount();j++){
+					ParseTree valueContext = insertSelectContext.getChild(j);
+					if (valueContext instanceof FieldsContext){
+						insertFieldsContext=(FieldsContext)valueContext;
+					} else if (valueContext instanceof SelectContext){
+						insertProjectionsContext=findFirstClassType(valueContext,ProjectionsContext.class);
+					}
+				}
+				if (insertFieldsContext==null){
+					throw new SQLParsingException("不允许插入语句不指定列:" + printSql(rootNode));
+				} else if (insertProjectionsContext!=null){
+					ParseTree[] appendValues=getInsertFieldAndSelectValue();
+					insertFieldsContext.children.add(appendValues[0]);
+					insertFieldsContext.children.add(appendValues[1]);
+					insertProjectionsContext.children.add(appendValues[2]);
+					insertProjectionsContext.children.add(appendValues[3]);
+				}
 			}
 		}
 	}
+
+
+	@SuppressWarnings("unchecked")
+	private <T> T findFirstClassType(ParseTree rootNode,Class<T> t){
+		int childCount=rootNode.getChildCount();
+		if (t.isInstance(rootNode)) {
+			return (T)rootNode;
+		}
+		for(int i=0;i<childCount;i++) {
+			ParseTree child = rootNode.getChild(i);
+			if (child!=null) {
+				T subQueryResult = findFirstClassType(child,t);
+				if(subQueryResult!=null){
+					return subQueryResult;
+				}
+			}
+		}
+		return null;
+	}
+
 
 	/**
 	 * 
@@ -148,6 +187,27 @@ public class SQLViewRewrite {
 		result[3]=valuesContext.getChild(3);
 		return result;
 	}
+
+	/**
+	 * 
+	 * @return 固定长度为4，前两个为字段，后两个为值
+	 */
+	private ParseTree[] getInsertFieldAndSelectValue() {
+		ParseTree[] result=new ParseTree[4];
+		String insertSql="insert into table1(name,tanent_id) select name,'user' from table2";
+		ParseASTNode parseASTNode = parserEngine.parse(insertSql, false);
+		ParseTree rootNode = parseASTNode.getRootNode();
+		InsertSelectClauseContext insertSelectContext=(InsertSelectClauseContext)rootNode.getChild(4);
+		FieldsContext fieldsContext=(FieldsContext)insertSelectContext.getChild(1);
+		SelectContext selectContext=(SelectContext)insertSelectContext.getChild(3);
+		ProjectionsContext projectsContext=findFirstClassType(selectContext,ProjectionsContext.class);
+		result[0]=fieldsContext.getChild(1);
+		result[1]=fieldsContext.getChild(2);
+		result[2]=projectsContext.getChild(1);
+		result[3]=projectsContext.getChild(2);
+		return result;
+	}
+
 
 	public void rewriteUpdateContext(ParseTree rootNode) {
 		WhereClauseContext whereClauseContext=findWhereContext(rootNode);

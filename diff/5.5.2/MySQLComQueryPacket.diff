@@ -1,0 +1,17 @@
+diff --git a/db-protocol/mysql/src/main/java/org/apache/shardingsphere/db/protocol/mysql/packet/command/query/text/query/MySQLComQueryPacket.java b/db-protocol/mysql/src/main/java/org/apache/shardingsphere/db/protocol/mysql/packet/command/query/text/query/MySQLComQueryPacket.java
+index fce9268..f4421a0 100644
+--- a/db-protocol/mysql/src/main/java/org/apache/shardingsphere/db/protocol/mysql/packet/command/query/text/query/MySQLComQueryPacket.java
++++ b/db-protocol/mysql/src/main/java/org/apache/shardingsphere/db/protocol/mysql/packet/command/query/text/query/MySQLComQueryPacket.java
+@@ -32,7 +32,11 @@ import org.apache.shardingsphere.infra.hint.SQLHintUtils;
+  */
+ public final class MySQLComQueryPacket extends MySQLCommandPacket implements SQLReceivedPacket {
+     
+-    private final String sql;
++	private String sql;
++    
++    public void setSQL(String sql) {
++    	this.sql=sql;
++    }
+     
+     @Getter
+     private final HintValueContext hintValueContext;

@@ -8,6 +8,8 @@ import org.antlr.v4.runtime.tree.TerminalNodeImpl;
 import org.apache.shardingsphere.infra.database.core.spi.DatabaseTypedSPILoader;
 import org.apache.shardingsphere.infra.database.core.type.DatabaseType;
 import org.apache.shardingsphere.infra.spi.type.typed.TypedSPILoader;
+import org.apache.shardingsphere.proxy.backend.session.ConnectionSession;
+import org.apache.shardingsphere.sql.parser.api.CacheOption;
 import org.apache.shardingsphere.sql.parser.api.SQLParserEngine;
 import org.apache.shardingsphere.sql.parser.api.visitor.format.SQLFormatVisitor;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.AliasContext;
@@ -32,10 +34,31 @@ import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.WhereCl
 import org.apache.shardingsphere.sql.parser.core.ParseASTNode;
 import org.apache.shardingsphere.sql.parser.exception.SQLParsingException;
 
-
 public class SQLViewRewrite {
 
+	private static SQLViewRewrite instance;
+
+	public static SQLViewRewrite getInstance(){
+		if(instance == null){
+			synchronized (SQLViewRewrite.class) {
+                if (instance == null) {
+					instance=new SQLViewRewrite(new SQLParserEngine(TypedSPILoader.getService(DatabaseType.class, "MySQL"), 
+						new CacheOption(2000, 65535L)));
+                }
+            }
+		}
+		return instance;
+	}
+
 	private SQLParserEngine parserEngine;
+
+	public SQLViewRewrite(){
+
+	}
+
+	public SQLViewRewrite(SQLParserEngine parserEngine){
+		this.parserEngine=parserEngine;
+	}
 	
 	public void setParseEngine(SQLParserEngine parserEngine){
 		this.parserEngine=parserEngine;
@@ -82,23 +105,23 @@ public class SQLViewRewrite {
 		printSql(rootNode);
 	}
 
-	public String rewriteSql(String sql) {
+	public String rewriteSql(String userName,String sql) {
 		ParseASTNode parseASTNode = parserEngine.parse(sql, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		if (rootNode instanceof SelectContext){
-			rewriteTableFactor(rootNode);
+			rewriteTableFactor(userName,rootNode);
 		} else if (rootNode instanceof InsertContext){
-			rewriteInsertContext(rootNode);
+			rewriteInsertContext(userName,rootNode);
 		} else if (rootNode instanceof UpdateContext){
-			rewriteUpdateContext(rootNode);
+			rewriteUpdateContext(userName,rootNode);
 		} else if (rootNode instanceof DeleteContext){
-			rewriteDeleteContext(rootNode);
+			rewriteDeleteContext(userName,rootNode);
 		} 
 		printStructure(rootNode,0);
 		return printSql(rootNode);
 	}
 
-	public void rewriteInsertContext(ParseTree rootNode) {
+	public void rewriteInsertContext(String userName,ParseTree rootNode) {
 		FieldsContext insertFieldsContext=null;
 		//查找insert value子语句
 		for(int i=0;i<rootNode.getChildCount();i++){
@@ -117,7 +140,7 @@ public class SQLViewRewrite {
 				if (insertFieldsContext==null){
 					throw new SQLParsingException("不允许插入语句不指定列:" + printSql(rootNode));
 				} else if (assignValueContext!=null){
-					ParseTree[] appendValues=getInsertFieldAndValue();
+					ParseTree[] appendValues=getInsertFieldAndValue(userName);
 					insertFieldsContext.children.add(appendValues[0]);
 					insertFieldsContext.children.add(appendValues[1]);
 					assignValueContext.children.add(appendValues[2]);
@@ -134,13 +157,13 @@ public class SQLViewRewrite {
 						insertFieldsContext=(FieldsContext)valueContext;
 					} else if (valueContext instanceof SelectContext){
 						insertProjectionsContext=findFirstClassType(valueContext,ProjectionsContext.class);
-						rewriteTableFactor(valueContext);
+						rewriteTableFactor(userName,valueContext);
 					}
 				}
 				if (insertFieldsContext==null){
 					throw new SQLParsingException("不允许插入语句不指定列:" + printSql(rootNode));
 				} else if (insertProjectionsContext!=null){
-					ParseTree[] appendValues=getInsertFieldAndSelectValue();
+					ParseTree[] appendValues=getInsertFieldAndSelectValue(userName);
 					insertFieldsContext.children.add(appendValues[0]);
 					insertFieldsContext.children.add(appendValues[1]);
 					insertProjectionsContext.children.add(appendValues[2]);
@@ -174,9 +197,9 @@ public class SQLViewRewrite {
 	 * 
 	 * @return 固定长度为4，前两个为字段，后两个为值
 	 */
-	private ParseTree[] getInsertFieldAndValue() {
+	private ParseTree[] getInsertFieldAndValue(String userName) {
 		ParseTree[] result=new ParseTree[4];
-		String insertSql="insert into t(a,tanentId) values('','userId')";
+		String insertSql="insert into t(a,tanentId) values('','" + userName +"')";
 		ParseASTNode parseASTNode = parserEngine.parse(insertSql, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		InsertValuesClauseContext insertValuesContext=(InsertValuesClauseContext)rootNode.getChild(4);
@@ -193,9 +216,9 @@ public class SQLViewRewrite {
 	 * 
 	 * @return 固定长度为4，前两个为字段，后两个为值
 	 */
-	private ParseTree[] getInsertFieldAndSelectValue() {
+	private ParseTree[] getInsertFieldAndSelectValue(String userName) {
 		ParseTree[] result=new ParseTree[4];
-		String insertSql="insert into table1(name,tanent_id) select name,'user' from table2";
+		String insertSql="insert into table1(name,tanent_id) select name,'" + userName + "' from table2";
 		ParseASTNode parseASTNode = parserEngine.parse(insertSql, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		InsertSelectClauseContext insertSelectContext=(InsertSelectClauseContext)rootNode.getChild(4);
@@ -210,7 +233,7 @@ public class SQLViewRewrite {
 	}
 
 
-	public void rewriteUpdateContext(ParseTree rootNode) {
+	public void rewriteUpdateContext(String userName,ParseTree rootNode) {
 		WhereClauseContext whereClauseContext=findWhereContext(rootNode);
 		if (whereClauseContext==null){
 			throw new SQLParsingException("更新必须包含条件语句," + printSql(rootNode));
@@ -224,9 +247,9 @@ public class SQLViewRewrite {
 				}
 			}
 		}
-		ExprContext expressContext=getConditionExpressionContext(whereClauseContext.getChild(1));
+		ExprContext expressContext=getConditionExpressionContext(userName,whereClauseContext.getChild(1));
 		whereClauseContext.children.set(1, expressContext);
-		rewriteTableFactor(whereClauseContext);
+		rewriteTableFactor(userName,whereClauseContext);
 	}
 
 	/**
@@ -257,18 +280,18 @@ public class SQLViewRewrite {
 		return null;
 	}
 
-	public void rewriteDeleteContext(ParseTree rootNode) {
+	public void rewriteDeleteContext(String userName,ParseTree rootNode) {
 		WhereClauseContext whereClauseContext=findWhereContext(rootNode);
 		if (whereClauseContext==null){
 			throw new SQLParsingException("删除必须包含条件语句," + printSql(rootNode));
 		}
-		ExprContext expressContext=getConditionExpressionContext(whereClauseContext.getChild(1));
+		ExprContext expressContext=getConditionExpressionContext(userName,whereClauseContext.getChild(1));
 		whereClauseContext.children.set(1, expressContext);
-		rewriteTableFactor(whereClauseContext);
+		rewriteTableFactor(userName,whereClauseContext);
 	}
 
-	private ExprContext getConditionExpressionContext(ParseTree originParseTree){
-		String deleteSql="delete from table1 where  tanent_id='user' and (name='b')";
+	private ExprContext getConditionExpressionContext(String userName,ParseTree originParseTree){
+		String deleteSql="delete from table1 where  tanent_id='" + userName +"' and (name='b')";
 		ParseASTNode parseASTNode = parserEngine.parse(deleteSql, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		WhereClauseContext whereContext=(WhereClauseContext) rootNode.getChild(3);
@@ -290,7 +313,7 @@ public class SQLViewRewrite {
 		return null;
 	}
 
-	public void rewriteTableFactor(ParseTree rootNode) {
+	public void rewriteTableFactor(String userName,ParseTree rootNode) {
 		int childCount=rootNode.getChildCount();
 		if (rootNode instanceof TableFactorContext) {
 			TableFactorContext factor=(TableFactorContext)rootNode;
@@ -309,7 +332,7 @@ public class SQLViewRewrite {
 			if (tableNameContext!=null){
 				TerminalNodeImpl tableNode= getTableName(tableNameContext);
 				if (isTableShouldRewrite(tableNode)){
-					SubqueryContext subqueryContext = findFirstClassType(createReplaceSubQuery(tableNode,hasAlias), SubqueryContext.class);
+					SubqueryContext subqueryContext = findFirstClassType(createReplaceSubQuery(userName,tableNode,hasAlias), SubqueryContext.class);
 					if (hasAlias){
 						factor.children.set(0, subqueryContext);
 					} 
@@ -325,7 +348,7 @@ public class SQLViewRewrite {
 			for(int i=0;i<childCount;i++) {
 				ParseTree child = rootNode.getChild(i);
 				if (child!=null) {
-					rewriteTableFactor(child);
+					rewriteTableFactor(userName,child);
 				}
 			}
 		}
@@ -337,8 +360,8 @@ public class SQLViewRewrite {
 	 * @param hasAlias 原始表有别名的话，替换的子查询不需要别名
 	 * @return
 	 */
-	private ParseTree createReplaceSubQuery(TerminalNodeImpl tableNode,boolean hasAlias) {
-		String subQuery="select * from (select * from view1 where tanentId='userId')" + (hasAlias?"":" " + tableNode.getText());
+	private ParseTree createReplaceSubQuery(String userName,TerminalNodeImpl tableNode,boolean hasAlias) {
+		String subQuery="select * from (select * from view1 where tanentId='" + userName +"')" + (hasAlias?"":" " + tableNode.getText());
 		ParseASTNode parseASTNode = parserEngine.parse(subQuery, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		printStructure(rootNode, 0);
@@ -354,5 +377,13 @@ public class SQLViewRewrite {
 		return (TerminalNodeImpl)tableNode;
 	}
 
+	public static String rewriteSql(ConnectionSession connectionSession,String sql){
+		SQLViewRewrite sqlWriter = getInstance();
+		String userName=connectionSession.getConnectionContext().getGrantee().getUsername();
+		if(userName!=null){
+			return sqlWriter.rewriteSql(userName,sql);
+		}
+		throw new SQLParsingException("异常的数据库账号信息:" + sql);
+	}
 
 }

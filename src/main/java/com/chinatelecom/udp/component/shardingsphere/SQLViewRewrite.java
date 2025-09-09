@@ -116,7 +116,9 @@ public class SQLViewRewrite {
 			rewriteUpdateContext(userName,rootNode);
 		} else if (rootNode instanceof DeleteContext){
 			rewriteDeleteContext(userName,rootNode);
-		} 
+		} else{
+			return sql;
+		}
 		printStructure(rootNode,0);
 		return printSql(rootNode);
 	}
@@ -381,7 +383,8 @@ public class SQLViewRewrite {
 		SQLViewRewrite sqlWriter = getInstance();
 		String userName=connectionSession.getConnectionContext().getGrantee().getUsername();
 		if(userName!=null){
-			return sqlWriter.rewriteSql(userName,sql);
+			String newSql= sqlWriter.rewriteSql(userName,sql);
+			return newSql;
 		}
 		throw new SQLParsingException("异常的数据库账号信息:" + sql);
 	}

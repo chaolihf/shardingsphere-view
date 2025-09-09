@@ -28,3 +28,10 @@ git log 查询出变更文件的记录
 git diff ec25fe5044d0719b5ebf778b9cb2428ecaa8e01c aec5b939257aefb85
 663061e0f097e9a11edc933 > MySQLComQueryPacket.diff
 生成两次commitid之间的变化
+
+# 7、开发环境搭建
+# 7.1 编译shadingdirver项目
+使用gradle jar 命令编译生成ShardingDriver-it.1.1.1.jar包
+# 7.1 编译shardingsphere-proxy-frontend-mysql项目
+根据diff目录下的diff文件修改对应版本的源码，并编译成jar包
+调试时可以手动引入ShardingDriver.jar文件并绑定源代码

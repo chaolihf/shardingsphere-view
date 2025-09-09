@@ -53,9 +53,10 @@ sourceCompatibility = 11
 dependencies {
 	compileOnly("org.apache.shardingsphere:shardingsphere-proxy-bootstrap:5.5.2")
 
-	testImplementation group: 'junit', name: 'junit', version: '4.12'
 	testImplementation (
+		'junit:junit:4.12',
 			'mysql:mysql-connector-java:8.0.33',
+			'org.postgresql:postgresql:42.5.1',
 	)
 	
 }

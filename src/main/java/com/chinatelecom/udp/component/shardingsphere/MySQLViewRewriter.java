@@ -1,25 +1,15 @@
 package com.chinatelecom.udp.component.shardingsphere;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Properties;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
 
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
-import org.apache.shardingsphere.infra.database.core.spi.DatabaseTypedSPILoader;
 import org.apache.shardingsphere.infra.database.core.type.DatabaseType;
 import org.apache.shardingsphere.infra.spi.type.typed.TypedSPILoader;
-import org.apache.shardingsphere.mode.manager.ContextManager;
-import org.apache.shardingsphere.proxy.backend.context.ProxyContext;
 import org.apache.shardingsphere.proxy.backend.session.ConnectionSession;
 import org.apache.shardingsphere.sql.parser.api.CacheOption;
 import org.apache.shardingsphere.sql.parser.api.SQLParserEngine;
-import org.apache.shardingsphere.sql.parser.api.visitor.format.SQLFormatVisitor;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.AliasContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.AssignmentContext;
 import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.AssignmentValuesContext;
@@ -42,107 +32,34 @@ import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.WhereCl
 import org.apache.shardingsphere.sql.parser.core.ParseASTNode;
 import org.apache.shardingsphere.sql.parser.exception.SQLParsingException;
 
-import java.util.logging.Level;
-import java.util.logging.Logger;
+public class MySQLViewRewriter extends ViewRewriter{
 
-public class SQLViewRewrite {
+	private static final Logger LOGGER = Logger.getLogger(MySQLViewRewriter.class.getName());
 
-	private static final Logger LOGGER = Logger.getLogger(SQLViewRewrite.class.getName());
+	private static MySQLViewRewriter instance;
 
-	private static SQLViewRewrite instance;
-
-	private Map<String,String> rewriteTables=new ConcurrentHashMap<>();
-
-	public static SQLViewRewrite getInstance(){
+	public static MySQLViewRewriter getInstance(){
 		if(instance == null){
-			synchronized (SQLViewRewrite.class) {
+			synchronized (MySQLViewRewriter.class) {
 				if (instance == null) {
-					instance=new SQLViewRewrite(new SQLParserEngine(TypedSPILoader.getService(DatabaseType.class, "MySQL"), 
-						new CacheOption(2000, 65535L)));
-					try {
-						instance.initRewriteTables();
-					} catch (InstantiationException | IllegalAccessException | IllegalArgumentException
-							| InvocationTargetException | NoSuchMethodException | SecurityException
-							| NoSuchFieldException e) {
-						LOGGER.log(Level.SEVERE,e.getMessage());
-					}
+					instance=new MySQLViewRewriter(
+						new SQLParserEngine(TypedSPILoader.getService(DatabaseType.class, "MySQL"), new CacheOption(2000, 65535L))
+					);
 				}
 			}
 		}
 		return instance;
 	}
 
-	private SQLParserEngine parserEngine;
-
-	public SQLViewRewrite(){
+	
+	public MySQLViewRewriter(){
 
 	}
 
-	public SQLViewRewrite(SQLParserEngine parserEngine){
-		this.parserEngine=parserEngine;
-	}
-
-	private void initRewriteTables() throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, NoSuchFieldException{
-		Class<?> clazz = ProxyContext.class;
-		Object instance = clazz.getDeclaredConstructor().newInstance();
-		Field field = clazz.getDeclaredField("contextManager");
-		field.setAccessible(true);
-		ContextManager contextManager = (ContextManager) field.get(instance);
-		String tables=contextManager.getMetaDataContexts().getMetaData().getProps().getProps().getProperty("replaceTables");
-		if(tables==null || tables.length()==0){
-			throw new IllegalArgumentException("未在global.yaml中找到replaceTables配置");
-		}
-		String[] allTables=tables.split(",");
-		for (String tableName : allTables) {
-			rewriteTables.put(tableName, tableName);
-		}
+	public MySQLViewRewriter(SQLParserEngine parserEngine){
+		super(parserEngine,"MySQL");
 	}
 	
-	public void setParseEngine(SQLParserEngine parserEngine){
-		this.parserEngine=parserEngine;
-	}
-	
-	private String printSql(ParseTree rootNode) {
-		Properties props = new Properties();
-		props.setProperty("parameterized", "false");
-		SQLFormatVisitor formatVisitor = DatabaseTypedSPILoader.getService(
-			SQLFormatVisitor.class, TypedSPILoader.getService(DatabaseType.class, "MySQL"), props);
-		String formattedSQL = formatVisitor.visit(rootNode);
-		System.out.println(formattedSQL);
-		return formattedSQL;
-	}
-	
-	public static String generateChars(int count) {
-		if(count<=0) return "";
-		char[] chars = new char[count];
-		Arrays.fill(chars, '-');
-		return new String(chars);
-	}
-	
-	private void printStructure(ParseTree rootNode,int level) {
-		int childCount=rootNode.getChildCount();
-		String concat=generateChars(level*3);
-		String text="";
-		if (rootNode instanceof TerminalNodeImpl) {
-			TerminalNodeImpl valueNode=(TerminalNodeImpl)rootNode;
-			text= " ------ " + valueNode.getText();
-		}
-		System.out.println( concat + rootNode.getClass().getSimpleName() + "(" + childCount + ")" + text);
-		for(int i=0;i<childCount;i++) {
-			ParseTree child = rootNode.getChild(i);
-			if (child!=null) {
-				printStructure(child,level+1);
-			}
-		}
-	}
-
-	void analyseSql(String sql) {
-		ParseASTNode parseASTNode = parserEngine.parse(sql, false);
-		ParseTree rootNode = parseASTNode.getRootNode();
-		printStructure(rootNode,0);
-		printSql(rootNode);
-	}
-
 	public String rewriteSql(String userName,String sql) {
 		ParseASTNode parseASTNode = parserEngine.parse(sql, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
@@ -211,25 +128,6 @@ public class SQLViewRewrite {
 				}
 			}
 		}
-	}
-
-
-	@SuppressWarnings("unchecked")
-	private <T> T findFirstClassType(ParseTree rootNode,Class<T> t){
-		int childCount=rootNode.getChildCount();
-		if (t.isInstance(rootNode)) {
-			return (T)rootNode;
-		}
-		for(int i=0;i<childCount;i++) {
-			ParseTree child = rootNode.getChild(i);
-			if (child!=null) {
-				T subQueryResult = findFirstClassType(child,t);
-				if(subQueryResult!=null){
-					return subQueryResult;
-				}
-			}
-		}
-		return null;
 	}
 
 
@@ -371,8 +269,9 @@ public class SQLViewRewrite {
 			//如果没有别名那就使用原表名增加一个别名，如果有别名那就直接将表替换为子查询
 			if (tableNameContext!=null){
 				TerminalNodeImpl tableNode= getTableName(tableNameContext);
-				if (isTableShouldRewrite(tableNode)){
-					SubqueryContext subqueryContext = findFirstClassType(createReplaceSubQuery(userName,tableNode,hasAlias), SubqueryContext.class);
+				String tableName=tableNode.getText();
+				if (isTableShouldRewrite(tableName)){
+					SubqueryContext subqueryContext = findFirstClassType(createReplaceSubQuery(userName,tableName,hasAlias), SubqueryContext.class);
 					if (hasAlias){
 						factor.children.set(0, subqueryContext);
 					} 
@@ -400,16 +299,12 @@ public class SQLViewRewrite {
 	 * @param hasAlias 原始表有别名的话，替换的子查询不需要别名
 	 * @return
 	 */
-	private ParseTree createReplaceSubQuery(String userName,TerminalNodeImpl tableNode,boolean hasAlias) {
-		String subQuery="select * from (select * from view1 where tanentId='" + userName +"')" + (hasAlias?"":" " + tableNode.getText());
+	private ParseTree createReplaceSubQuery(String userName,String tableName,boolean hasAlias) {
+		String subQuery="select * from (select * from " + tableName +" where tanentId='" + userName +"')" + (hasAlias?"":" " + tableName);
 		ParseASTNode parseASTNode = parserEngine.parse(subQuery, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		printStructure(rootNode, 0);
 		return rootNode;
-	}
-
-	private boolean isTableShouldRewrite(TerminalNodeImpl tableNode){
-		return rewriteTables.containsKey(tableNode.getText());
 	}
 
 	private TerminalNodeImpl getTableName(TableNameContext tableNameContext) {
@@ -418,7 +313,7 @@ public class SQLViewRewrite {
 	}
 
 	public static String rewriteSql(ConnectionSession connectionSession,String sql){
-		SQLViewRewrite sqlWriter = getInstance();
+		MySQLViewRewriter sqlWriter = getInstance();
 		String userName=connectionSession.getConnectionContext().getGrantee().getUsername();
 		if(userName!=null){
 			String newSql= sqlWriter.rewriteSql(userName,sql);

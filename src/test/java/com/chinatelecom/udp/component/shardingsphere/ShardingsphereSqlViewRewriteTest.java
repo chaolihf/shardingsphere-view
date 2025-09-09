@@ -23,8 +23,7 @@ public class ShardingsphereSqlViewRewriteTest {
 		String result;
 		DatabaseType databaseType = TypedSPILoader.getService(DatabaseType.class, "MySQL");
 		SQLParserEngine parserEngine = new SQLParserEngine(databaseType, new CacheOption(2000, 65535L));
-		SQLViewRewrite rewriter=new SQLViewRewrite();
-		rewriter.setParseEngine(parserEngine);
+		MySQLViewRewriter rewriter=new MySQLViewRewriter(parserEngine);
 		rewriter.analyseSql("update table1 set name='b',name='c' where name='b' and name in (select name from table2)");
 		result=rewriter.rewriteSql("user","update table1 set name='b',name='c' where name='b' and name in (select name from table2)");
 		assertTrue(("UPDATE  table1 SET name = 'b',\n" + //

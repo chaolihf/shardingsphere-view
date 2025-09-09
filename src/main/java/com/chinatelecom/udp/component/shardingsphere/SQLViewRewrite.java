@@ -1,13 +1,21 @@
 package com.chinatelecom.udp.component.shardingsphere;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
 import org.apache.shardingsphere.infra.database.core.spi.DatabaseTypedSPILoader;
 import org.apache.shardingsphere.infra.database.core.type.DatabaseType;
 import org.apache.shardingsphere.infra.spi.type.typed.TypedSPILoader;
+import org.apache.shardingsphere.mode.manager.ContextManager;
+import org.apache.shardingsphere.proxy.backend.context.ProxyContext;
 import org.apache.shardingsphere.proxy.backend.session.ConnectionSession;
 import org.apache.shardingsphere.sql.parser.api.CacheOption;
 import org.apache.shardingsphere.sql.parser.api.SQLParserEngine;
@@ -34,18 +42,32 @@ import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.WhereCl
 import org.apache.shardingsphere.sql.parser.core.ParseASTNode;
 import org.apache.shardingsphere.sql.parser.exception.SQLParsingException;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 public class SQLViewRewrite {
 
+	private static final Logger LOGGER = Logger.getLogger(SQLViewRewrite.class.getName());
+
 	private static SQLViewRewrite instance;
+
+	private Map<String,String> rewriteTables=new ConcurrentHashMap<>();
 
 	public static SQLViewRewrite getInstance(){
 		if(instance == null){
 			synchronized (SQLViewRewrite.class) {
-                if (instance == null) {
+				if (instance == null) {
 					instance=new SQLViewRewrite(new SQLParserEngine(TypedSPILoader.getService(DatabaseType.class, "MySQL"), 
 						new CacheOption(2000, 65535L)));
-                }
-            }
+					try {
+						instance.initRewriteTables();
+					} catch (InstantiationException | IllegalAccessException | IllegalArgumentException
+							| InvocationTargetException | NoSuchMethodException | SecurityException
+							| NoSuchFieldException e) {
+						LOGGER.log(Level.SEVERE,e.getMessage());
+					}
+				}
+			}
 		}
 		return instance;
 	}
@@ -58,6 +80,22 @@ public class SQLViewRewrite {
 
 	public SQLViewRewrite(SQLParserEngine parserEngine){
 		this.parserEngine=parserEngine;
+	}
+
+	private void initRewriteTables() throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, NoSuchMethodException, SecurityException, NoSuchFieldException{
+		Class<?> clazz = ProxyContext.class;
+		Object instance = clazz.getDeclaredConstructor().newInstance();
+		Field field = clazz.getDeclaredField("contextManager");
+		field.setAccessible(true);
+		ContextManager contextManager = (ContextManager) field.get(instance);
+		String tables=contextManager.getMetaDataContexts().getMetaData().getProps().getProps().getProperty("replaceTables");
+		if(tables==null || tables.length()==0){
+			throw new IllegalArgumentException("未在global.yaml中找到replaceTables配置");
+		}
+		String[] allTables=tables.split(",");
+		for (String tableName : allTables) {
+			rewriteTables.put(tableName, tableName);
+		}
 	}
 	
 	public void setParseEngine(SQLParserEngine parserEngine){
@@ -371,7 +409,7 @@ public class SQLViewRewrite {
 	}
 
 	private boolean isTableShouldRewrite(TerminalNodeImpl tableNode){
-		return true;
+		return rewriteTables.containsKey(tableNode.getText());
 	}
 
 	private TerminalNodeImpl getTableName(TableNameContext tableNameContext) {

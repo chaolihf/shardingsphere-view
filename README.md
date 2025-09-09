@@ -1,5 +1,12 @@
 # 1、说明
 基于ShardingSphere实现sql语句的转写，将对特定表的操作转化为等同对视图的操作
+# 1.1 使用说明
+global.yaml增加配置
+props:
+  replaceTables: table1,table2
+replaceTables是需要替代的表
+
+视图对应的表：tanent_id
 
 # 2、注入点
 需要在XX位置对sql语句进行改写，不改变其他的流程# 2.1 MySQL解析插入
@@ -35,3 +42,12 @@ git diff ec25fe5044d0719b5ebf778b9cb2428ecaa8e01c aec5b939257aefb85
 # 7.1 编译shardingsphere-proxy-frontend-mysql项目
 根据diff目录下的diff文件修改对应版本的源码，并编译成jar包
 调试时可以手动引入ShardingDriver.jar文件并绑定源代码
+# 7.2 忽略不相关为文件
+在gitignore中增加
+*
+!/db-protocol/mysql/src/main/java/org/apache/shardingsphere/db/protocol/mysql/packet/command/query/text/query/MySQLComQueryPacket.java
+!/db-protocol/mysql/src/main/java/org/apache/shardingsphere/db/protocol/mysql/packet/command/query/binary/prepare/MySQLComStmtPreparePacket.java
+!/proxy/frontend/type/mysql/src/main/java/org/apache/shardingsphere/proxy/frontend/mysql/command/query/binary/prepare/MySQLComStmtPrepareExecutor.java
+!/proxy/frontend/type/mysql/src/main/java/org/apache/shardingsphere/proxy/frontend/mysql/command/query/text/query/MySQLComQueryPacketExecutor.java
+!/proxy/backend/core/src/main/java/org/apache/shardingsphere/proxy/backend/context/ProxyContext.java
+

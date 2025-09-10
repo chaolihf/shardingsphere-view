@@ -11,6 +11,7 @@ import java.util.logging.Logger;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
 import org.apache.shardingsphere.infra.database.core.type.DatabaseType;
+import org.apache.shardingsphere.infra.rewrite.sql.impl.DefaultSQLBuilder;
 import org.apache.shardingsphere.infra.rewrite.sql.token.common.pojo.SQLToken;
 import org.apache.shardingsphere.infra.spi.type.typed.TypedSPILoader;
 import org.apache.shardingsphere.mode.manager.ContextManager;
@@ -62,6 +63,12 @@ public abstract class ViewRewriter {
 		this.parserEngine=new SQLParserEngine(engineDatabaseType, new CacheOption(2000, 65535L));
 	}
 
+	public String rewriteSql(String sql,List<SQLToken> tokens){
+		DefaultSQLBuilder sqlBuilder=new DefaultSQLBuilder(sql,tokens);
+		String newSql=sqlBuilder.toSQL();
+		return newSql;
+	}
+
     public String printSql(ParseASTNode rootNode) {
 		SQLFormatVisitor formatVisitor=null;
 		if (databaseType.equals("MySQL")){
@@ -76,7 +83,7 @@ public abstract class ViewRewriter {
 
 	
 	protected boolean isTableShouldRewrite(String tableName){
-		return rewriteTables.containsKey(tableName);
+		return rewriteTables.containsKey(tableName.toLowerCase());
 	}
 
 	
@@ -130,6 +137,10 @@ public abstract class ViewRewriter {
 			}
 		}
 		return null;
+	}
+
+	protected void addRewriteTable(String tableName){
+		rewriteTables.put(tableName.toLowerCase(), tableName);
 	}
 
 

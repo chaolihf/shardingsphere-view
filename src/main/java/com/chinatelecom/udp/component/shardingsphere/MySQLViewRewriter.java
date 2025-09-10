@@ -35,6 +35,10 @@ import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.WhereCl
 import org.apache.shardingsphere.sql.parser.core.ParseASTNode;
 import org.apache.shardingsphere.sql.parser.exception.SQLParsingException;
 
+import com.chinatelecom.udp.component.shardingsphere.tokens.AppendTanentConditionToken;
+import com.chinatelecom.udp.component.shardingsphere.tokens.EndConditionToken;
+import com.chinatelecom.udp.component.shardingsphere.tokens.ReplaceTableNameToken;
+
 public class MySQLViewRewriter extends ViewRewriter{
 
 	private static final Logger LOGGER = Logger.getLogger(MySQLViewRewriter.class.getName());
@@ -355,17 +359,8 @@ public class MySQLViewRewriter extends ViewRewriter{
 			}
 			//如果没有别名那就使用原表名增加一个别名，如果有别名那就直接将表替换为子查询
 			if (tableNameContext!=null){
-				TerminalNodeImpl tableNode= getTableName(tableNameContext);
-				String tableName=tableNode.getText();
-				if (isTableShouldRewrite(tableName)){
-					SubqueryContext subqueryContext = findFirstClassType(createReplaceSubQuery(userName,tableName,hasAlias), SubqueryContext.class);
-					if (hasAlias){
-						factor.children.set(0, subqueryContext);
-					} 
-					else {
-						factor.children.remove(0);
-						factor.children.add(subqueryContext.getParent());
-					}
+				if (isTableShouldRewrite(tableNameContext.getText())){
+					result.add(new ReplaceTableNameToken(tableNameContext,hasAlias,userName));
 				}
 			}
 
@@ -445,9 +440,9 @@ public class MySQLViewRewriter extends ViewRewriter{
 				}
 			}
 		}
-		ExprContext expressContext=getConditionExpressionContext(userName,whereClauseContext.getChild(1));
-		whereClauseContext.children.set(1, expressContext);
+		result.add(new AppendTanentConditionToken(whereClauseContext.start.getStopIndex()+1, userName));
 		generateSelectTokens(result,userName,whereClauseContext,sql);
+		result.add(new EndConditionToken(whereClauseContext.stop.getStopIndex()+1));
 	}
 
 	public void generateDeleteTokens(List<SQLToken> result,String userName,ParseTree rootNode,String sql) {

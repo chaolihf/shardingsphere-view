@@ -43,9 +43,7 @@ public class PostgresViewRewriter extends ViewRewriter{
 		if(instance == null){
 			synchronized (PostgresViewRewriter.class) {
 				if (instance == null) {
-					instance=new PostgresViewRewriter(
-						new SQLParserEngine(TypedSPILoader.getService(DatabaseType.class, "PostgreSQL"), new CacheOption(2000, 65535L))
-					);
+					instance=new PostgresViewRewriter();
 				}
 			}
 		}
@@ -54,32 +52,28 @@ public class PostgresViewRewriter extends ViewRewriter{
 
 	
 	public PostgresViewRewriter(){
-
+		super("PostgreSQL");
 	}
 
-	public PostgresViewRewriter(SQLParserEngine parserEngine){
-		super(parserEngine,"PostgreSQL");
-	}
-	
 	public String rewriteSql(String userName,String sql) {
 		ParseASTNode parseASTNode = parserEngine.parse(sql, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		if (rootNode instanceof SelectContext){
-			rewriteTableFactor(userName,rootNode);
+			rewriteTableFactor(userName,rootNode,parseASTNode);
 		} else if (rootNode instanceof InsertContext){
-			rewriteInsertContext(userName,rootNode);
+			rewriteInsertContext(userName,rootNode,parseASTNode);
 		} else if (rootNode instanceof UpdateContext){
-			rewriteUpdateContext(userName,rootNode);
+			rewriteUpdateContext(userName,rootNode,parseASTNode);
 		} else if (rootNode instanceof DeleteContext){
-			rewriteDeleteContext(userName,rootNode);
+			rewriteDeleteContext(userName,rootNode,parseASTNode);
 		} else{
 			return sql;
 		}
 		printStructure(rootNode,0);
-		return printSql(rootNode);
+		return printSql(parseASTNode);
 	}
 
-	public void rewriteInsertContext(String userName,ParseTree rootNode) {
+	public void rewriteInsertContext(String userName,ParseTree rootNode,ParseASTNode parseASTNode) {
 		FieldsContext insertFieldsContext=null;
 		//查找insert value子语句
 		for(int i=0;i<rootNode.getChildCount();i++){
@@ -96,7 +90,7 @@ public class PostgresViewRewriter extends ViewRewriter{
 					}
 				}
 				if (insertFieldsContext==null){
-					throw new SQLParsingException("不允许插入语句不指定列:" + printSql(rootNode));
+					throw new SQLParsingException("不允许插入语句不指定列:" + printSql(parseASTNode));
 				} else if (assignValueContext!=null){
 					ParseTree[] appendValues=getInsertFieldAndValue(userName);
 					insertFieldsContext.children.add(appendValues[0]);
@@ -115,11 +109,11 @@ public class PostgresViewRewriter extends ViewRewriter{
 						insertFieldsContext=(FieldsContext)valueContext;
 					} else if (valueContext instanceof SelectContext){
 						insertProjectionsContext=findFirstClassType(valueContext,ProjectionsContext.class);
-						rewriteTableFactor(userName,valueContext);
+						rewriteTableFactor(userName,valueContext,parseASTNode);
 					}
 				}
 				if (insertFieldsContext==null){
-					throw new SQLParsingException("不允许插入语句不指定列:" + printSql(rootNode));
+					throw new SQLParsingException("不允许插入语句不指定列:" + printSql(parseASTNode));
 				} else if (insertProjectionsContext!=null){
 					ParseTree[] appendValues=getInsertFieldAndSelectValue(userName);
 					insertFieldsContext.children.add(appendValues[0]);
@@ -172,23 +166,23 @@ public class PostgresViewRewriter extends ViewRewriter{
 	}
 
 
-	public void rewriteUpdateContext(String userName,ParseTree rootNode) {
+	public void rewriteUpdateContext(String userName,ParseTree rootNode,ParseASTNode parseASTNode) {
 		WhereClauseContext whereClauseContext=findWhereContext(rootNode);
 		if (whereClauseContext==null){
-			throw new SQLParsingException("更新必须包含条件语句," + printSql(rootNode));
+			throw new SQLParsingException("更新必须包含条件语句," + printSql(parseASTNode));
 		}
 		SetAssignmentsClauseContext setAssignContext=findSetAssignContext(rootNode);
 		for(int i=0;i<setAssignContext.getChildCount();i++){
 			ParseTree childNode = setAssignContext.getChild(i);
 			if(childNode instanceof AssignmentContext){
 				if (!checkColumnNameValid(childNode)){
-					throw new SQLParsingException("更新语句不允许包含租户字段," + printSql(rootNode));
+					throw new SQLParsingException("更新语句不允许包含租户字段," + printSql(parseASTNode));
 				}
 			}
 		}
 		ExprContext expressContext=getConditionExpressionContext(userName,whereClauseContext.getChild(1));
 		whereClauseContext.children.set(1, expressContext);
-		rewriteTableFactor(userName,whereClauseContext);
+		rewriteTableFactor(userName,whereClauseContext,parseASTNode);
 	}
 
 	/**
@@ -219,14 +213,14 @@ public class PostgresViewRewriter extends ViewRewriter{
 		return null;
 	}
 
-	public void rewriteDeleteContext(String userName,ParseTree rootNode) {
+	public void rewriteDeleteContext(String userName,ParseTree rootNode,ParseASTNode parseASTNode) {
 		WhereClauseContext whereClauseContext=findWhereContext(rootNode);
 		if (whereClauseContext==null){
-			throw new SQLParsingException("删除必须包含条件语句," + printSql(rootNode));
+			throw new SQLParsingException("删除必须包含条件语句," + printSql(parseASTNode));
 		}
 		ExprContext expressContext=getConditionExpressionContext(userName,whereClauseContext.getChild(1));
 		whereClauseContext.children.set(1, expressContext);
-		rewriteTableFactor(userName,whereClauseContext);
+		rewriteTableFactor(userName,whereClauseContext,parseASTNode);
 	}
 
 	private ExprContext getConditionExpressionContext(String userName,ParseTree originParseTree){
@@ -252,7 +246,7 @@ public class PostgresViewRewriter extends ViewRewriter{
 		return null;
 	}
 
-	public void rewriteTableFactor(String userName,ParseTree rootNode) {
+	public void rewriteTableFactor(String userName,ParseTree rootNode,ParseASTNode parseASTNode) {
 		int childCount=rootNode.getChildCount();
 		if (rootNode instanceof TableFactorContext) {
 			TableFactorContext factor=(TableFactorContext)rootNode;
@@ -288,7 +282,7 @@ public class PostgresViewRewriter extends ViewRewriter{
 			for(int i=0;i<childCount;i++) {
 				ParseTree child = rootNode.getChild(i);
 				if (child!=null) {
-					rewriteTableFactor(userName,child);
+					rewriteTableFactor(userName,child,parseASTNode);
 				}
 			}
 		}

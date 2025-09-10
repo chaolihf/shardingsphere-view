@@ -2,28 +2,32 @@ package com.chinatelecom.udp.component.shardingsphere;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
-import org.apache.shardingsphere.infra.database.core.spi.DatabaseTypedSPILoader;
 import org.apache.shardingsphere.infra.database.core.type.DatabaseType;
+import org.apache.shardingsphere.infra.rewrite.sql.token.common.pojo.SQLToken;
 import org.apache.shardingsphere.infra.spi.type.typed.TypedSPILoader;
 import org.apache.shardingsphere.mode.manager.ContextManager;
 import org.apache.shardingsphere.proxy.backend.context.ProxyContext;
+import org.apache.shardingsphere.sql.parser.api.CacheOption;
 import org.apache.shardingsphere.sql.parser.api.SQLParserEngine;
 import org.apache.shardingsphere.sql.parser.api.visitor.format.SQLFormatVisitor;
 import org.apache.shardingsphere.sql.parser.core.ParseASTNode;
+import org.apache.shardingsphere.sql.parser.mysql.visitor.format.MySQLFormatVisitor;
 
-public class ViewRewriter {
+public abstract class ViewRewriter {
 	private static final Logger LOGGER = Logger.getLogger(ViewRewriter.class.getName());
     private Map<String,String> rewriteTables=new ConcurrentHashMap<>();
 	private String databaseType;
 	protected SQLParserEngine parserEngine;
+
+	public abstract List<SQLToken> generateTokens(String userName,String sql);
 
 	public ViewRewriter(){
 		try {
@@ -32,6 +36,9 @@ public class ViewRewriter {
 			Field field = clazz.getDeclaredField("contextManager");
 			field.setAccessible(true);
 			ContextManager contextManager = (ContextManager) field.get(instance);
+			if(contextManager==null){
+				throw new IllegalArgumentException("初始化未找到contextManager");
+			}
 			String tables=contextManager.getMetaDataContexts().getMetaData().getProps().getProps().getProperty("replaceTables");
 			if(tables==null || tables.length()==0){
 				throw new IllegalArgumentException("未在global.yaml中找到replaceTables配置");
@@ -48,22 +55,21 @@ public class ViewRewriter {
 	}
 
 	
-	public ViewRewriter(SQLParserEngine parserEngine,String databaseType){
+	public ViewRewriter(String databaseType){
 		this();
-		this.parserEngine=parserEngine;
 		this.databaseType=databaseType;
+		DatabaseType engineDatabaseType=TypedSPILoader.getService(DatabaseType.class, databaseType);
+		this.parserEngine=new SQLParserEngine(engineDatabaseType, new CacheOption(2000, 65535L));
 	}
 
-	public void setParseEngine(SQLParserEngine parserEngine){
-		this.parserEngine=parserEngine;
-	}
-
-    public String printSql(ParseTree rootNode) {
-		Properties props = new Properties();
-		props.setProperty("parameterized", "false");
-		SQLFormatVisitor formatVisitor = DatabaseTypedSPILoader.getService(
-			SQLFormatVisitor.class, TypedSPILoader.getService(DatabaseType.class, databaseType), props);
-		String formattedSQL = formatVisitor.visit(rootNode);
+    public String printSql(ParseASTNode rootNode) {
+		SQLFormatVisitor formatVisitor=null;
+		if (databaseType.equals("MySQL")){
+			formatVisitor=new MySQLFormatVisitor();
+		} else if (databaseType.equals("PostgreSQL")){
+			
+		}
+		String formattedSQL = formatVisitor.visit(rootNode.getRootNode());
 		System.out.println(formattedSQL);
 		return formattedSQL;
 	}
@@ -103,7 +109,7 @@ public class ViewRewriter {
 		ParseASTNode parseASTNode = parserEngine.parse(sql, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		printStructure(rootNode,0);
-		printSql(rootNode);
+		printSql(parseASTNode);
 	}
 
 

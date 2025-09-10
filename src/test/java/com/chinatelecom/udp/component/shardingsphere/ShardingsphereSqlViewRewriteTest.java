@@ -27,10 +27,44 @@ public class ShardingsphereSqlViewRewriteTest {
 
 	@Test
 	public void testMySqlRewriter() {
-		String result;
 		MySQLViewRewriter rewriter=new MySQLViewRewriter();
 		rewriter.addRewriteTable("table1");
 		rewriter.addRewriteTable("table2");
+
+		rewriter.analyseSql("insert into table1(name) select name from table2");
+		rewriter.analyseSql("insert into table1(name,tanent_id) select name,'user' from table2");
+		validMySql(rewriter,"insert into table1(name) select name from table2",
+			"insert into table1(tanent_id,name) select 'user',name from (select * from table2 where tanent_id='user') table2");
+		
+		try{
+			validMySql(rewriter,"insert into table1 values('a','v')","");
+			assertTrue("应抛出语句异常错误", false);
+		} catch (SQLParsingException e){
+			assertTrue(e.getMessage().indexOf("不允许插入语句不指定列")!=-1);
+		}
+
+		rewriter.analyseSql("insert into table1(name) values('a')");
+		rewriter.analyseSql("insert into table1(name,id) values('a','b')");
+		validMySql(rewriter,"insert into table1(name) values('a')",
+			"insert into table1(tanent_id,name) values('user','a')");
+			
+		//实际执行是会报错，提示存在多个列
+		validMySql(rewriter,"insert into table1(name,tanent_id) values('a',?)",
+			"insert into table1(tanent_id,name,tanent_id) values('user','a',?)");
+
+
+		rewriter.analyseSql("delete from table1 where name='b'");
+		rewriter.analyseSql("delete from table1 where  tanent_id='user' and (name='b')");
+		rewriter.analyseSql("delete from table1 where name='b' or name='c'");
+		rewriter.analyseSql("delete from table1 where tanent_id='user' and (name='b' or name='c')");
+
+		validMySql(rewriter,"delete from table1 where name='b'",
+			"delete from table1 where tanent_id='user' and ( name='b')");
+
+		validMySql(rewriter,"delete from table1 where name='b' or name='c'",
+			"delete from table1 where tanent_id='user' and ( name='b' or name='c')");
+
+
 
 		rewriter.analyseSql("select * from (select * from view1) t where name='bbb'");
 		rewriter.analyseSql("select * from (select * from view1)");
@@ -45,63 +79,15 @@ public class ShardingsphereSqlViewRewriteTest {
 		rewriter.analyseSql("select * from (select * from view1) t where name='bbb'");
 		rewriter.analyseSql("select * from (select * from view1)");
 		
-		rewriter.analyseSql("insert into table1 values('a','v')");
-		try{
-			rewriter.rewriteSql("user","insert into table1 values('a','v')");
-			assertTrue("应抛出语句异常错误", false);
-		} catch (SQLParsingException e){
-			assertTrue(e.getMessage().indexOf("不允许插入语句不指定列")!=-1);
-		}
-		rewriter.analyseSql("insert into table1(name) values('a')");
-		rewriter.analyseSql("insert into table1(name,id) values('a','b')");
-		result= rewriter.rewriteSql("user","insert into table1(name) values('a')");
-		assertTrue(("INSERT  INTO table1 (name , tanentId)\n" + //
-						"VALUES\n" + //
-						"\t('a', 'user')").equals(result));
-		//实际执行是会报错，提示存在多个列
-		rewriter.rewriteSql("user","insert into table1(name,tanentId) values('a',?)");
-
-		rewriter.analyseSql("delete from table1 where name='b'");
-		rewriter.analyseSql("delete from table1 where  tanent_id='user' and (name='b')");
-
-
-		rewriter.analyseSql("delete from table1 where name='b' or name='c'");
-		rewriter.analyseSql("delete from table1 where tanent_id='user' and (name='b' or name='c')");
-
-		result=rewriter.rewriteSql("user","delete from table1 where name='b'");
-		assertTrue(("DELETE  FROM table1 WHERE \n" + //
-						"\ttanent_id = 'user'\n" + //
-						"\tand (name = 'b')").equals(result));
-		result=rewriter.rewriteSql("user","delete from table1 where name='b' or name='c'");
-		assertTrue(("DELETE  FROM table1 WHERE \n" + //
-						"\ttanent_id = 'user'\n" + //
-						"\tand (name = 'b'\n" + //
-						"\tor name = 'c')").equals(result));
-
-
+		
+		
+		
 		rewriter.analyseSql("update table1 set name='b',name='c' where name='b'");
 		rewriter.analyseSql("update table1 set name='b' ,name='c' where tanent_id='user' and (name='b')");
 		
-		result=rewriter.rewriteSql("user","update table1 set name='b',name='c' where name='b'");
+		validMySql(rewriter,"update table1 set name='b',name='c' where name='b'",
+			"update table1 set name='b',name='c' where tanent_id='user' and ( name='b')");
 
-		assertTrue(("UPDATE  table1 SET name = 'b',\n" + //
-						"\tname = 'c' WHERE \n" + //
-						"\ttanent_id = 'user'\n" + //
-						"\tand (name = 'b')").equals(result));
-
-		rewriter.analyseSql("insert into table1(name) select name from table2");
-		rewriter.analyseSql("insert into table1(name,tanent_id) select name,'user' from table2");
-		result=rewriter.rewriteSql("user","insert into table1(name) select name from table2");
-		assertTrue(("INSERT  INTO table1 (name , tanent_id) \n" + //
-						"SELECT name , 'user' \n" + //
-						"FROM \n" + //
-						"(\n" + //
-						"\tSELECT * \n" + //
-						"\tFROM view1\n" + //
-						"\tWHERE \n" + //
-						"\t\ttanentId = 'user'\n" + //
-						") table2;").equals(result));
-		
 	}
 
 	@Test

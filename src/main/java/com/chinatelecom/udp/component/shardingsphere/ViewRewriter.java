@@ -68,19 +68,6 @@ public abstract class ViewRewriter {
 		String newSql=sqlBuilder.toSQL();
 		return newSql;
 	}
-
-    public String printSql(ParseASTNode rootNode) {
-		SQLFormatVisitor formatVisitor=null;
-		if (databaseType.equals("MySQL")){
-			formatVisitor=new MySQLFormatVisitor();
-		} else if (databaseType.equals("PostgreSQL")){
-			
-		}
-		String formattedSQL = formatVisitor.visit(rootNode.getRootNode());
-		System.out.println(formattedSQL);
-		return formattedSQL;
-	}
-
 	
 	protected boolean isTableShouldRewrite(String tableName){
 		return rewriteTables.containsKey(tableName.toLowerCase());
@@ -116,7 +103,6 @@ public abstract class ViewRewriter {
 		ParseASTNode parseASTNode = parserEngine.parse(sql, false);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		printStructure(rootNode,0);
-		printSql(parseASTNode);
 	}
 
 

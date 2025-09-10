@@ -1,8 +1,8 @@
 package com.chinatelecom.udp.component.shardingsphere.tokens;
 
+import org.antlr.v4.runtime.ParserRuleContext;
 import org.apache.shardingsphere.infra.rewrite.sql.token.common.pojo.SQLToken;
 import org.apache.shardingsphere.infra.rewrite.sql.token.common.pojo.Substitutable;
-import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.TableNameContext;
 
 public class ReplaceTableNameToken extends SQLToken implements Substitutable{
 
@@ -11,7 +11,7 @@ public class ReplaceTableNameToken extends SQLToken implements Substitutable{
     private String tableName;
     private String userName;
     
-    public ReplaceTableNameToken(TableNameContext tableNameContext,boolean hasAlias,String userName) {
+    public ReplaceTableNameToken(ParserRuleContext tableNameContext,boolean hasAlias,String userName) {
         super(tableNameContext.start.getStartIndex());
         this.stopIndex=tableNameContext.start.getStopIndex();
         this.hasAlias=hasAlias;

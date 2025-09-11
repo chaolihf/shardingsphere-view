@@ -8,7 +8,11 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
 import org.apache.shardingsphere.infra.rewrite.sql.token.common.pojo.SQLToken;
 import org.apache.shardingsphere.proxy.backend.session.ConnectionSession;
-import org.apache.shardingsphere.sql.parser.autogen.MySQLStatementParser.ColumnRefContext;
+import org.apache.shardingsphere.sql.parser.autogen.PostgreSQLStatementParser.SetClauseListContext;
+import org.apache.shardingsphere.sql.parser.autogen.PostgreSQLStatementParser.SetTargetContext;
+import org.apache.shardingsphere.sql.parser.autogen.PostgreSQLStatementParser.InsertColumnListContext;
+import org.apache.shardingsphere.sql.parser.autogen.PostgreSQLStatementParser.SimpleSelectContext;
+import org.apache.shardingsphere.sql.parser.autogen.PostgreSQLStatementParser.ValuesClauseContext;
 import org.apache.shardingsphere.sql.parser.autogen.PostgreSQLStatementParser.AliasClauseContext;
 import org.apache.shardingsphere.sql.parser.autogen.PostgreSQLStatementParser.DeleteContext;
 import org.apache.shardingsphere.sql.parser.autogen.PostgreSQLStatementParser.InsertContext;
@@ -21,6 +25,8 @@ import org.apache.shardingsphere.sql.parser.core.ParseASTNode;
 import org.apache.shardingsphere.sql.parser.exception.SQLParsingException;
 
 import com.chinatelecom.udp.component.shardingsphere.tokens.AppendTanentConditionToken;
+import com.chinatelecom.udp.component.shardingsphere.tokens.AppendTanentFieldToken;
+import com.chinatelecom.udp.component.shardingsphere.tokens.AppendTanentValueToken;
 import com.chinatelecom.udp.component.shardingsphere.tokens.EndConditionToken;
 import com.chinatelecom.udp.component.shardingsphere.tokens.ReplaceTableNameToken;
 
@@ -51,37 +57,13 @@ public class PostgreSQLViewRewriter extends ViewRewriter{
 	 * @param childNode
 	 */
 	private boolean checkColumnNameValid(ParseTree assignmentNode) {
-		for (int i = 0; i < assignmentNode.getChildCount(); i++) {
-			ParseTree childNode = assignmentNode.getChild(i);
-			if (childNode instanceof ColumnRefContext){
-				TerminalNodeImpl nameNode=(TerminalNodeImpl) childNode.getChild(0).getChild(0).getChild(0);
-				if ("tanent_id".equalsIgnoreCase(nameNode.getText())){
-					return false;
-				}
-			}
+		TerminalNodeImpl node= findFirstClassType(assignmentNode, TerminalNodeImpl.class);
+		if ("tanent_id".equalsIgnoreCase(node.getText())){
+			return false;
 		}
 		return true;
 	}
 
-
-	// private SetAssignmentsClauseContext findSetAssignContext(ParseTree rootNode) {
-	// 	for(int i=0;i<rootNode.getChildCount();i++){
-	// 		ParseTree childContext=rootNode.getChild(i);
-	// 		if(childContext instanceof SetAssignmentsClauseContext){
-	// 			return (SetAssignmentsClauseContext) childContext;
-	// 		}
-	// 	}
-	// 	return null;
-	// }
-	private WhereClauseContext findWhereContext(ParseTree rootNode) {
-		for(int i=0;i<rootNode.getChildCount();i++){
-			ParseTree childContext=rootNode.getChild(i);
-			if(childContext instanceof WhereClauseContext){
-				return (WhereClauseContext) childContext;
-			}
-		}
-		return null;
-	}
 	public static String rewriteSql(ConnectionSession connectionSession,String sql){
 		PostgreSQLViewRewriter sqlWriter = getInstance();
 		String userName=connectionSession.getConnectionContext().getGrantee().getUsername();
@@ -144,71 +126,43 @@ public class PostgreSQLViewRewriter extends ViewRewriter{
 		}
 	}
 	public void generateInsertTokens(List<SQLToken> result,String userName,ParseTree rootNode,String sql) {
-		// FieldsContext insertFieldsContext=null;
-		// //查找insert value子语句
-		// for(int i=0;i<rootNode.getChildCount();i++){
-		// 	ParseTree childContext = rootNode.getChild(i);
-		// 	if (childContext instanceof InsertValuesClauseContext){
-		// 		AssignmentValuesContext assignValueContext=null;
-		// 		InsertValuesClauseContext insertValuesContext=(InsertValuesClauseContext)childContext;
-		// 		for(int j=0;j<insertValuesContext.getChildCount();j++){
-		// 			ParseTree valueContext = insertValuesContext.getChild(j);
-		// 			if (valueContext instanceof FieldsContext){
-		// 				insertFieldsContext=(FieldsContext)valueContext;
-		// 			} else if (valueContext instanceof AssignmentValuesContext){
-		// 				assignValueContext=(AssignmentValuesContext)valueContext;
-		// 			}
-		// 		}
-		// 		if (insertFieldsContext==null){
-		// 			throw new SQLParsingException("不允许插入语句不指定列:" + sql);
-		// 		} else if (assignValueContext!=null){
-		// 			result.add(new AppendTanentFieldToken(insertFieldsContext.start.getStartIndex()));
-		// 			result.add(new AppendTanentValueToken(assignValueContext.start.getStopIndex()+1, userName));
-		// 		}
-				
-		// 	} else if (childContext instanceof InsertSelectClauseContext){
-		// 		InsertSelectClauseContext insertSelectContext=(InsertSelectClauseContext)childContext;
-		// 		ProjectionsContext insertProjectionsContext=null;
-		// 		for(int j=0;j<insertSelectContext.getChildCount();j++){
-		// 			ParseTree valueContext = insertSelectContext.getChild(j);
-		// 			if (valueContext instanceof FieldsContext){
-		// 				insertFieldsContext=(FieldsContext)valueContext;
-		// 			} else if (valueContext instanceof SelectContext){
-		// 				insertProjectionsContext=findFirstClassType(valueContext,ProjectionsContext.class);
-		// 				generateSelectTokens(result,userName,valueContext,sql);
-		// 			}
-		// 		}
-		// 		if (insertFieldsContext==null){
-		// 			throw new SQLParsingException("不允许插入语句不指定列:" + sql);
-		// 		} else if (insertProjectionsContext!=null){
-		// 			result.add(new AppendTanentFieldToken(insertFieldsContext.start.getStartIndex()));
-		// 			result.add(new AppendTanentValueToken(insertProjectionsContext.start.getStartIndex(), userName));
-		// 		}
-		// 	}
-		// }
+		InsertColumnListContext insertFieldsContext=findFirstClassType(rootNode, InsertColumnListContext.class);
+		if (insertFieldsContext==null){
+			throw new SQLParsingException("不允许插入语句不指定列:" + sql);
+		}
+		result.add(new AppendTanentFieldToken(insertFieldsContext.start.getStartIndex()));
+		SimpleSelectContext assignContext=findFirstClassType(rootNode, SimpleSelectContext.class);
+		ValuesClauseContext assignValueContext = assignContext.valuesClause();
+		if(assignValueContext!=null){//直接赋值
+			result.add(new AppendTanentValueToken(assignValueContext.LP_().getSymbol().getStopIndex()+1, userName));
+		} else{//子查询
+			result.add(new AppendTanentValueToken(assignContext.targetList().start.getStartIndex(), userName));
+			generateSelectTokens(result,userName,assignContext,sql);
+		}
+
 	}
 
 	public void generateUpdateTokens(List<SQLToken> result,String userName,ParseTree rootNode,String sql) {
-		// WhereClauseContext whereClauseContext=findWhereContext(rootNode);
-		// if (whereClauseContext==null){
-		// 	throw new SQLParsingException("更新必须包含条件语句," + sql);
-		// }
-		// SetAssignmentsClauseContext setAssignContext=findSetAssignContext(rootNode);
-		// for(int i=0;i<setAssignContext.getChildCount();i++){
-		// 	ParseTree childNode = setAssignContext.getChild(i);
-		// 	if(childNode instanceof AssignmentContext){
-		// 		if (!checkColumnNameValid(childNode)){
-		// 			throw new SQLParsingException("更新语句不允许包含租户字段," + sql);
-		// 		}
-		// 	}
-		// }
-		// result.add(new AppendTanentConditionToken(whereClauseContext.start.getStopIndex()+1, userName));
-		// generateSelectTokens(result,userName,whereClauseContext,sql);
-		// result.add(new EndConditionToken(whereClauseContext.stop.getStopIndex()+1));
+		WhereClauseContext whereClauseContext=findFirstClassType(rootNode,WhereClauseContext.class);
+		if (whereClauseContext==null){
+			throw new SQLParsingException("更新必须包含条件语句," + sql);
+		}
+		SetClauseListContext setAssignContext=findFirstClassType(rootNode,SetClauseListContext.class);
+		for(int i=0;i<setAssignContext.getChildCount();i++){
+			SetTargetContext targetContext = findFirstClassType(setAssignContext.getChild(i),SetTargetContext.class);
+			if(targetContext!=null){
+				if (!checkColumnNameValid(targetContext)){
+					throw new SQLParsingException("更新语句不允许包含租户字段," + sql);
+				}
+			}
+		}
+		result.add(new AppendTanentConditionToken(whereClauseContext.start.getStopIndex()+1, userName));
+		generateSelectTokens(result,userName,whereClauseContext,sql);
+		result.add(new EndConditionToken(whereClauseContext.stop.getStopIndex()+1));
 	}
 
 	public void generateDeleteTokens(List<SQLToken> result,String userName,ParseTree rootNode,String sql) {
-		WhereClauseContext whereClauseContext=findWhereContext(rootNode);
+		WhereClauseContext whereClauseContext=findFirstClassType(rootNode,WhereClauseContext.class);
 		if (whereClauseContext==null){
 			throw new SQLParsingException("删除必须包含条件语句," + sql);
 		}

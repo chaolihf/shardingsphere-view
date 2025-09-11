@@ -64,7 +64,7 @@ public class MySQLViewRewriter extends ViewRewriter{
 			ParseTree childNode = assignmentNode.getChild(i);
 			if (childNode instanceof ColumnRefContext){
 				TerminalNodeImpl nameNode=(TerminalNodeImpl) childNode.getChild(0).getChild(0).getChild(0);
-				if ("tanent_id".equalsIgnoreCase(nameNode.getText())){
+				if (TANENT_FIELD_ID.equalsIgnoreCase(nameNode.getText())){
 					return false;
 				}
 			}
@@ -105,7 +105,7 @@ public class MySQLViewRewriter extends ViewRewriter{
 
 	@Override
 	public List<SQLToken> generateTokens(String userName,String sql) {
-		ParseASTNode parseASTNode = parserEngine.parse(sql, false);
+		ParseASTNode parseASTNode = parserEngine.parse(sql, true);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		List<SQLToken> result=new ArrayList<>();
 		if (rootNode instanceof SelectContext){

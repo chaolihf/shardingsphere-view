@@ -18,15 +18,15 @@ import org.apache.shardingsphere.mode.manager.ContextManager;
 import org.apache.shardingsphere.proxy.backend.context.ProxyContext;
 import org.apache.shardingsphere.sql.parser.api.CacheOption;
 import org.apache.shardingsphere.sql.parser.api.SQLParserEngine;
-import org.apache.shardingsphere.sql.parser.api.visitor.format.SQLFormatVisitor;
 import org.apache.shardingsphere.sql.parser.core.ParseASTNode;
-import org.apache.shardingsphere.sql.parser.mysql.visitor.format.MySQLFormatVisitor;
 
 public abstract class ViewRewriter {
+	public static final String TANENT_FIELD_ID="tanent_id";
 	private static final Logger LOGGER = Logger.getLogger(ViewRewriter.class.getName());
     private Map<String,String> rewriteTables=new ConcurrentHashMap<>();
 	private String databaseType;
 	protected SQLParserEngine parserEngine;
+
 
 	public abstract List<SQLToken> generateTokens(String userName,String sql);
 
@@ -55,7 +55,10 @@ public abstract class ViewRewriter {
 		}
 	}
 
-	
+	public String getDatabaseType(){
+		return databaseType;
+	}
+
 	public ViewRewriter(String databaseType){
 		this();
 		this.databaseType=databaseType;
@@ -100,7 +103,7 @@ public abstract class ViewRewriter {
 	}
 
 	protected void analyseSql(String sql) {
-		ParseASTNode parseASTNode = parserEngine.parse(sql, false);
+		ParseASTNode parseASTNode = parserEngine.parse(sql, true);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		printStructure(rootNode,0);
 	}

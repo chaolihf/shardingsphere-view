@@ -2,6 +2,8 @@ package com.chinatelecom.udp.component.shardingsphere.tokens;
 
 import org.apache.shardingsphere.infra.rewrite.sql.token.common.pojo.SQLToken;
 
+import com.chinatelecom.udp.component.shardingsphere.ViewRewriter;
+
 public class AppendTanentConditionToken extends SQLToken {
 
     private String userName;
@@ -18,7 +20,7 @@ public class AppendTanentConditionToken extends SQLToken {
 
     @Override
     public String toString(){
-        return new StringBuilder(" tanent_id='")
+        return new StringBuilder(" ").append(ViewRewriter.TANENT_FIELD_ID).append("='")
             .append(userName).append("' and (").toString();
     }
 

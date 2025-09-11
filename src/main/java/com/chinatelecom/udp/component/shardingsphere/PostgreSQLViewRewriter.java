@@ -58,7 +58,7 @@ public class PostgreSQLViewRewriter extends ViewRewriter{
 	 */
 	private boolean checkColumnNameValid(ParseTree assignmentNode) {
 		TerminalNodeImpl node= findFirstClassType(assignmentNode, TerminalNodeImpl.class);
-		if ("tanent_id".equalsIgnoreCase(node.getText())){
+		if (TANENT_FIELD_ID.equalsIgnoreCase(node.getText())){
 			return false;
 		}
 		return true;
@@ -78,7 +78,7 @@ public class PostgreSQLViewRewriter extends ViewRewriter{
 
 	@Override
 	public List<SQLToken> generateTokens(String userName,String sql) {
-		ParseASTNode parseASTNode = parserEngine.parse(sql, false);
+		ParseASTNode parseASTNode = parserEngine.parse(sql, true);
 		ParseTree rootNode = parseASTNode.getRootNode();
 		List<SQLToken> result=new ArrayList<>();
 		if (rootNode instanceof SelectContext){

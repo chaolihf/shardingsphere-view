@@ -4,6 +4,8 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.apache.shardingsphere.infra.rewrite.sql.token.common.pojo.SQLToken;
 import org.apache.shardingsphere.infra.rewrite.sql.token.common.pojo.Substitutable;
 
+import com.chinatelecom.udp.component.shardingsphere.ViewRewriter;
+
 public class ReplaceTableNameToken extends SQLToken implements Substitutable{
 
     private int stopIndex;
@@ -29,7 +31,9 @@ public class ReplaceTableNameToken extends SQLToken implements Substitutable{
         StringBuilder sql=new StringBuilder(50);
         sql.append("(select * from ")
             .append(tableName)
-            .append(" where tanent_id='")
+            .append(" where ")
+            .append(ViewRewriter.TANENT_FIELD_ID)
+            .append("='")
             .append(userName)
             .append("')");
         

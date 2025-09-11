@@ -2,6 +2,8 @@ package com.chinatelecom.udp.component.shardingsphere.tokens;
 
 import org.apache.shardingsphere.infra.rewrite.sql.token.common.pojo.SQLToken;
 
+import com.chinatelecom.udp.component.shardingsphere.ViewRewriter;
+
 public class AppendTanentFieldToken extends SQLToken {
     
     public AppendTanentFieldToken(int startIndex){
@@ -15,7 +17,7 @@ public class AppendTanentFieldToken extends SQLToken {
 
     @Override
     public String toString(){
-        return "tanent_id,";
+        return ViewRewriter.TANENT_FIELD_ID + ",";
     }
 
 }

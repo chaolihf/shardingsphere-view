@@ -28,10 +28,10 @@ public class PrepareStatementTest {
 
 	@Test
     public void testPostgresPreparedStatement() {
-		String url = "jdbc:postgresql://localhost:5432/your_database";
+		String url = "jdbc:postgresql://localhost:33307/sharding_db1";
 		String user = "root";
 		String password = "root";
-		String sql = "SELECT * FROM table2 WHERE name = ? and 1=1";
+		String sql = "SELECT * FROM table1 WHERE name = ? and 1=1";
 		try {
 			Class.forName("org.postgresql.Driver");
 			try (java.sql.Connection conn = java.sql.DriverManager.getConnection(url, user, password);

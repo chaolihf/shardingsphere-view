@@ -69,6 +69,9 @@ public class PostgreSQLViewRewriter extends ViewRewriter{
 		String userName=connectionSession.getConnectionContext().getGrantee().getUsername();
 		if(userName!=null){
 			List<SQLToken> tokens = sqlWriter.generateTokens("user", sql);
+			if (tokens==null){
+				return sql;
+			}
 			String newSql=sqlWriter.rewriteSql(sql, tokens);
 			return newSql;
 		}
@@ -78,7 +81,12 @@ public class PostgreSQLViewRewriter extends ViewRewriter{
 
 	@Override
 	public List<SQLToken> generateTokens(String userName,String sql) {
-		ParseASTNode parseASTNode = parserEngine.parse(sql, true);
+		ParseASTNode parseASTNode = null;
+		try{
+			parseASTNode=parserEngine.parse(sql, true);
+		} catch(SQLParsingException e){
+			return null;
+		}
 		ParseTree rootNode = parseASTNode.getRootNode();
 		List<SQLToken> result=new ArrayList<>();
 		if (rootNode instanceof SelectContext){

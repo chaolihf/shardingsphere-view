@@ -83,6 +83,12 @@ public class ShardingsphereSqlViewRewriteTest {
 		validMySql(rewriter,"update table1 set name='b',name='c' where name='b'",
 			"update table1 set name='b',name='c' where tanent_id='user' and ( name='b')");
 
+		try{
+			validMySql(rewriter,"update table2 set tanent_id='b' where 1=1","");
+		} catch(SQLParsingException e){
+			assertTrue(e.getMessage().indexOf("更新语句不允许包含租户字段")!=-1);
+		}
+
 	}
 
 	private void validPostgreSQL(PostgreSQLViewRewriter rewriter,String sql,String targetSql){
@@ -111,7 +117,11 @@ public class ShardingsphereSqlViewRewriteTest {
 			"delete from table1 where tanent_id='user' and ( name='b' or name='c')");
 
 
-
+		try{
+			validPostgreSQL(rewriter,"update table2 set tanent_id='b' where 1=1","");
+		} catch(SQLParsingException e){
+			assertTrue(e.getMessage().indexOf("更新语句不允许包含租户字段")!=-1);
+		}
 			
 		rewriter.analyseSql("update table1 set name='b',name='c' where name='b'");
 		rewriter.analyseSql("update table1 set name='b' ,name='c' where tanent_id='user' and (name='b')");

@@ -63,7 +63,7 @@ public class MySQLViewRewriter extends ViewRewriter{
 		for (int i = 0; i < assignmentNode.getChildCount(); i++) {
 			ParseTree childNode = assignmentNode.getChild(i);
 			if (childNode instanceof ColumnRefContext){
-				TerminalNodeImpl nameNode=(TerminalNodeImpl) childNode.getChild(0).getChild(0).getChild(0);
+				TerminalNodeImpl nameNode=(TerminalNodeImpl) childNode.getChild(0).getChild(0);
 				if (TANENT_FIELD_ID.equalsIgnoreCase(nameNode.getText())){
 					return false;
 				}
